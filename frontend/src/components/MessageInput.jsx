@@ -9,14 +9,19 @@ const MessageInput = () => {
   const [fileAttachment, setFileAttachment] = useState(null);
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
-  const { sendMessage } = useChatStore();
+  const { sendMessage, isSending } = useChatStore();
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file");
+    const acceptedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!acceptedTypes.includes(file.type)) {
+      toast.error("Please select a JPEG, PNG, WebP, or GIF image");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size cannot exceed 5MB");
       return;
     }
 
@@ -24,6 +29,7 @@ const MessageInput = () => {
     reader.onloadend = () => {
       setImagePreview(reader.result);
     };
+    reader.onerror = () => toast.error("Error processing image");
     reader.readAsDataURL(file);
   };
 
@@ -46,7 +52,7 @@ const MessageInput = () => {
       return;
     }
 
-    toast.loading("Processing file...");
+    const loadingToast = toast.loading("Processing file...");
     
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -55,12 +61,12 @@ const MessageInput = () => {
         name: file.name,
         type: file.type
       });
-      toast.dismiss();
+      toast.dismiss(loadingToast);
       toast.success("File ready to send");
     };
     
     reader.onerror = () => {
-      toast.dismiss();
+      toast.dismiss(loadingToast);
       toast.error("Error processing file");
     };
     
@@ -82,20 +88,20 @@ const MessageInput = () => {
     if (!text.trim() && !imagePreview && !fileAttachment) return;
 
     try {
-      await sendMessage({
+      const sent = await sendMessage({
         text: text.trim(),
         image: imagePreview,
         file: fileAttachment
       });
 
-      // Clear form
+      if (!sent) return;
       setText("");
       setImagePreview(null);
       setFileAttachment(null);
       if (imageInputRef.current) imageInputRef.current.value = "";
       if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (error) {
-      console.error("Failed to send message:", error);
+    } catch {
+      toast.error("Failed to send message");
     }
   };
 
@@ -117,6 +123,7 @@ const MessageInput = () => {
                 className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-base-300
                 flex items-center justify-center shadow-md"
                 type="button"
+                aria-label="Remove image"
               >
                 <X className="size-3 sm:size-3.5" />
               </button>
@@ -135,6 +142,7 @@ const MessageInput = () => {
                 className="absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-base-300
                 flex items-center justify-center shadow-md"
                 type="button"
+                aria-label="Remove file"
               >
                 <X className="size-3 sm:size-3.5" />
               </button>
@@ -150,6 +158,9 @@ const MessageInput = () => {
             className="flex-1 bg-transparent border-none outline-none text-sm sm:text-base text-base-content placeholder:text-base-content/50 min-w-0"
             placeholder="Type a message..."
             value={text}
+            aria-label="Message"
+            disabled={isSending}
+            maxLength={4000}
             onChange={(e) => setText(e.target.value)}
           />
           
@@ -159,14 +170,16 @@ const MessageInput = () => {
             accept="image/*"
             className="hidden"
             ref={imageInputRef}
-            onChange={handleImageChange}
+              onChange={handleImageChange}
+              disabled={isSending}
           />
           <input
             type="file"
             accept=".pdf,.doc,.docx,.txt"
             className="hidden"
             ref={fileInputRef}
-            onChange={handleFileChange}
+              onChange={handleFileChange}
+              disabled={isSending}
           />
 
           {/* Attachment buttons */}
@@ -176,6 +189,8 @@ const MessageInput = () => {
               type="button"
               className={`flex-shrink-0 h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 flex items-center justify-center rounded-full ${imagePreview ? "text-primary" : "text-base-content/70 hover:bg-base-300"}`}
               onClick={() => imageInputRef.current?.click()}
+              aria-label="Attach image"
+              disabled={isSending}
             >
               <Image size={16} className="sm:size-18" />
             </button>
@@ -185,6 +200,8 @@ const MessageInput = () => {
               type="button"
               className={`flex-shrink-0 h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 flex items-center justify-center rounded-full ${fileAttachment ? "text-primary" : "text-base-content/70 hover:bg-base-300"}`}
               onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach document"
+              disabled={isSending}
             >
               <PaperclipIcon size={16} className="sm:size-18" />
             </button>
@@ -195,7 +212,8 @@ const MessageInput = () => {
         <button
           type="submit"
           className={`btn btn-circle btn-sm sm:btn-md btn-primary ${!text.trim() && !imagePreview && !fileAttachment ? 'opacity-70' : ''}`}
-          disabled={!text.trim() && !imagePreview && !fileAttachment}
+          disabled={isSending || (!text.trim() && !imagePreview && !fileAttachment)}
+          aria-label="Send message"
         >
           <Send size={16} className="sm:size-18" />
         </button>

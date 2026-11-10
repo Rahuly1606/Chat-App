@@ -1,104 +1,91 @@
-import Message from "../models/message.model.js";
-import User from "../models/user.model.js";
-import cloudinary from "../lib/cloudinary.js"
-import { getReceiverSocketId, io } from "../lib/socket.js";
+import { createMessage, findConversation } from "../models/message.model.js";
+import { findPublicUserById, listOtherUsers } from "../models/user.model.js";
+import cloudinary, { assertCloudinaryConfigured } from "../lib/cloudinary.js";
+import { sanitizeFileName, validateDataUrl } from "../lib/uploads.js";
+import { io } from "../lib/socket.js";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const imageTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const fileTypes = [
+  "application/msword",
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+];
 
 export const getUserForSidebar = async (req, res) => {
-    try {
-        const loggedInUserId = req.user._id;
-        const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
-        res.status(200).json(filteredUsers)
-    } catch (error) {
-        console.log("Error in Getusersidebar:", error.message);
-        res.status(500).json({ error: "Something went wrong" })
-    }
-}
+  const users = await listOtherUsers(req.user._id);
+  return res.status(200).json(users);
+};
 
 export const getMessages = async (req, res) => {
-    try {
-        const { id: userToChatId } = req.params;
-        const myId = req.user._id;
+  const userToChatId = req.params.id;
+  if (!uuidPattern.test(userToChatId) || userToChatId === req.user._id) {
+    return res.status(400).json({ message: "Invalid chat user" });
+  }
+  if (!await findPublicUserById(userToChatId)) return res.status(404).json({ message: "User not found" });
 
-        const messages = await Message.find({
-            $or: [
-                { senderId: myId, receiverId: userToChatId },
-                { senderId: userToChatId, receiverId: myId }
-            ]
-        })
-        res.status(200).json(messages);
-    } catch (error) {
-        console.log("error in getMessages:", error.message);
-        res.status(500).json({ error: "Something went wrong" });
+  const messages = await findConversation(req.user._id, userToChatId);
+  return res.status(200).json(messages);
+};
 
+export const sendMessage = async (req, res, next) => {
+  const receiverId = req.params.id;
+  const senderId = req.user._id;
+  const text = String(req.body.text || "").trim();
+  const uploadedAssets = [];
+
+  if (!uuidPattern.test(receiverId) || receiverId === senderId) {
+    return res.status(400).json({ message: "Invalid message recipient" });
+  }
+  if (text.length > 4_000) return res.status(400).json({ message: "Message text is too long" });
+  if (!text && !req.body.image && !req.body.file?.data) {
+    return res.status(400).json({ message: "A message must include text or an attachment" });
+  }
+  if (!await findPublicUserById(receiverId)) return res.status(404).json({ message: "Recipient not found" });
+
+  try {
+    let imageUrl = null;
+    let fileData = null;
+
+    if (req.body.image) {
+      assertCloudinaryConfigured();
+      const image = validateDataUrl(req.body.image, imageTypes, 5 * 1024 * 1024);
+      const uploadedImage = await cloudinary.uploader.upload(image.dataUrl, {
+        folder: "chat_images",
+        quality: "auto",
+        resource_type: "image",
+      });
+      uploadedAssets.push(uploadedImage);
+      imageUrl = uploadedImage.secure_url;
     }
-}
 
-export const sendMessage = async (req, res) => {
-    try {
-        const { text, image, file } = req.body;
-        const { id: receiverId } = req.params;
-        const senderId = req.user._id;
-        let imageUrl;
-        let fileData = null;
-
-        if (image) {
-            try {
-                // Save image to cloudinary with increased size limit
-                const uploadedResponse = await cloudinary.uploader.upload(image, {
-                    resource_type: "image",
-                    max_file_size: 10000000, // 10MB in bytes
-                    quality: "auto"
-                });
-                imageUrl = uploadedResponse.secure_url;
-            } catch (imageError) {
-                console.error("Error uploading image to Cloudinary:", imageError);
-                return res.status(500).json({ error: "Failed to upload image" });
-            }
-        }
-
-        if (file && file.data) {
-            try {
-                // Handle file upload (PDF, etc.)
-                const uploadedFile = await cloudinary.uploader.upload(file.data, {
-                    resource_type: "auto",
-                    max_file_size: 10000000, // 10MB in bytes
-                    folder: "chat_files",
-                    public_id: `file_${Date.now()}`,
-                });
-                
-                fileData = {
-                    url: uploadedFile.secure_url,
-                    name: file.name,
-                    type: file.type
-                };
-            } catch (fileError) {
-                console.error("Error uploading file to Cloudinary:", fileError);
-                return res.status(500).json({ error: "Failed to upload file" });
-            }
-        }
-
-        try {
-            const newMessage = new Message({
-                senderId,
-                receiverId,
-                text,
-                image: imageUrl,
-                file: fileData
-            });
-
-            await newMessage.save();
-            const receiverSocketId = getReceiverSocketId(receiverId);
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("newMessage", newMessage);
-            }
-
-            res.status(200).json(newMessage);
-        } catch (dbError) {
-            console.error("Error saving message to database:", dbError);
-            res.status(500).json({ error: "Failed to save message" });
-        }
-    } catch (error) {
-        console.error("Error in Sending message:", error);
-        res.status(500).json({ error: "Something went wrong" });
+    if (req.body.file?.data) {
+      assertCloudinaryConfigured();
+      const file = validateDataUrl(req.body.file.data, fileTypes, 5 * 1024 * 1024);
+      const uploadedFile = await cloudinary.uploader.upload(file.dataUrl, {
+        folder: "chat_files",
+        resource_type: "raw",
+        use_filename: false,
+      });
+      uploadedAssets.push(uploadedFile);
+      fileData = {
+        name: sanitizeFileName(req.body.file.name),
+        type: file.mimeType,
+        url: uploadedFile.secure_url,
+      };
     }
-}
+
+    const message = await createMessage({ senderId, receiverId, text, image: imageUrl, file: fileData });
+    io.to([`user:${senderId}`, `user:${receiverId}`]).emit("newMessage", message);
+    return res.status(201).json(message);
+  } catch (error) {
+    await Promise.all(uploadedAssets.map((asset) => (
+      cloudinary.uploader.destroy(asset.public_id, { resource_type: asset.resource_type }).catch(() => {})
+    )));
+    if (error.message.startsWith("Attachment") || error.message.startsWith("Unsupported") || error.message === "Invalid file name") {
+      return res.status(400).json({ message: error.message });
+    }
+    return next(error);
+  }
+};

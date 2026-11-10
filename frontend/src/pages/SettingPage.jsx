@@ -27,6 +27,8 @@ const SettingsPage = () => {
                 ${theme === t ? "bg-base-200" : "hover:bg-base-200/50"}
               `}
               onClick={() => setTheme(t)}
+              aria-pressed={theme === t}
+              aria-label={`Use ${t} theme`}
             >
               <div className="relative h-8 w-full rounded-md overflow-hidden" data-theme={t}>
                 <div className="absolute inset-0 grid grid-cols-4 gap-px p-1">
@@ -100,7 +102,7 @@ const SettingsPage = () => {
                       value="This is a preview"
                       readOnly
                     />
-                    <button className="btn btn-primary h-10 min-h-0">
+                    <button className="btn btn-primary h-10 min-h-0" aria-label="Send preview message" disabled>
                       <Send size={18} />
                     </button>
                   </div>

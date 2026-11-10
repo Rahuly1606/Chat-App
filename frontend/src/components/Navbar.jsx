@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 const Navbar = () => {
   const { logout, authUser } = useAuthStore();
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
@@ -21,10 +21,6 @@ const Navbar = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
-
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true);
-    }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -63,6 +59,7 @@ const Navbar = () => {
               <button
                 onClick={handleInstallClick}
                 className="btn btn-sm btn-primary gap-1"
+                aria-label="Install app"
               >
                 <Download size={16} />
                 <span className="hidden sm:inline">Install</span>
@@ -72,6 +69,7 @@ const Navbar = () => {
             <Link
               to={"/settings"}
               className="btn btn-sm gap-2 transition-colors"
+              aria-label="Settings"
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Settings</span>
@@ -79,12 +77,12 @@ const Navbar = () => {
 
             {authUser && (
               <>
-                <Link to={"/profile"} className="btn btn-sm gap-2">
+                <Link to={"/profile"} className="btn btn-sm gap-2" aria-label="Profile">
                   <User className="size-5" />
                   <span className="hidden sm:inline">Profile</span>
                 </Link>
 
-                <button className="btn btn-sm gap-2" onClick={logout}>
+                <button className="btn btn-sm gap-2" onClick={logout} aria-label="Log out">
                   <LogOut className="size-5" />
                   <span className="hidden sm:inline">Logout</span>
                 </button>

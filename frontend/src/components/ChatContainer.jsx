@@ -19,6 +19,7 @@ const ChatContainer = () => {
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
+  const shouldAutoScroll = useRef(true);
 
   useEffect(() => {
     getMessages(selectedUser._id);
@@ -29,17 +30,17 @@ const ChatContainer = () => {
   }, [selectedUser._id, getMessages, subscribeToMessages, unsubscribeFromMessages]);
 
   useEffect(() => {
-    if (messageEndRef.current && messages) {
-      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
+    const latestMessage = messages.at(-1);
+    if (messageEndRef.current && (shouldAutoScroll.current || latestMessage?.senderId === authUser._id)) {
+      messageEndRef.current.scrollIntoView({ behavior: messages.length > 1 ? "smooth" : "auto" });
     }
-  }, [messages]);
+  }, [authUser._id, messages]);
 
   if (isMessagesLoading) {
     return (
       <div className="flex-1 flex flex-col overflow-auto">
         <ChatHeader />
         <MessageSkeleton />
-        <MessageInput />
       </div>
     );
   }
@@ -48,7 +49,13 @@ const ChatContainer = () => {
     <div className="flex-1 flex flex-col overflow-auto h-full">
       <ChatHeader />
 
-      <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-3">
+      <div
+        className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-3"
+        onScroll={(event) => {
+          const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+          shouldAutoScroll.current = scrollHeight - scrollTop - clientHeight < 120;
+        }}
+      >
         {messages.map((message, index) => (
           <div
             key={message._id}

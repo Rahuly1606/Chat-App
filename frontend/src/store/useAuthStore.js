@@ -2,8 +2,9 @@ import { create } from "zustand";
 import { axiosInstance } from "../lib/axios.js";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
+import { socketUrl } from "../lib/axios.js";
 
-const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:5001" : "/";
+let authCheckPromise;
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -15,16 +16,20 @@ export const useAuthStore = create((set, get) => ({
   socket: null,
 
   checkAuth: async () => {
-    try {
-      const res = await axiosInstance.get("/auth/check");
-
-      set({ authUser: res.data });
-      get().connectSocket();
-    } catch {
-      set({ authUser: null });
-    } finally {
-      set({ isCheckingAuth: false });
-    }
+    if (authCheckPromise) return authCheckPromise;
+    authCheckPromise = (async () => {
+      try {
+        const res = await axiosInstance.get("/auth/check");
+        set({ authUser: res.data });
+        get().connectSocket();
+      } catch {
+        get().clearSession();
+      } finally {
+        set({ isCheckingAuth: false });
+        authCheckPromise = null;
+      }
+    })();
+    return authCheckPromise;
   },
 
   signup: async (data) => {
@@ -35,7 +40,7 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Account created successfully");
       get().connectSocket();
     } catch (error) {
-      const errorMessage = error.response?.data?.message || "Error creating account. Please try again.";
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Error creating account. Please try again.";
       toast.error(errorMessage);
     } finally {
       set({ isSigningUp: false });
@@ -51,7 +56,7 @@ export const useAuthStore = create((set, get) => ({
 
       get().connectSocket();
     } catch (error) {
-      const errorMessage = error.response?.data?.message || "Error logging in. Please try again.";
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Error logging in. Please try again.";
       toast.error(errorMessage);
     } finally {
       set({ isLoggingIn: false });
@@ -61,13 +66,12 @@ export const useAuthStore = create((set, get) => ({
   logout: async () => {
     try {
       await axiosInstance.post("/auth/logout");
-      set({ authUser: null });
       toast.success("Logged out successfully");
-      get().disconnectSocket();
     } catch (error) {
-      console.error("Logout error:", error);
-      const errorMessage = error.response?.data?.message || "Error logging out. Please try again.";
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Logged out locally, but the server could not be reached.";
       toast.error(errorMessage);
+    } finally {
+      get().clearSession();
     }
   },
 
@@ -77,10 +81,11 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.put("/auth/update-profile", data);
       set({ authUser: res.data });
       toast.success("Profile updated successfully");
+      return true;
     } catch (error) {
-      console.error("Error updating profile:", error);
-      const errorMessage = error.response?.data?.message || "Error updating profile. Please try again.";
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Error updating profile. Please try again.";
       toast.error(errorMessage);
+      return false;
     } finally {
       set({ isUpdatingProfile: false });
     }
@@ -88,22 +93,30 @@ export const useAuthStore = create((set, get) => ({
 
   connectSocket: () => {
     const { authUser } = get();
-    if (!authUser || get().socket?.connected) return;
+    if (!authUser || get().socket) return;
 
-    const socket = io(BASE_URL, {
-      query: {
-        userId: authUser._id,
-      },
+    const socket = io(socketUrl, {
+      withCredentials: true,
     });
-    socket.connect();
-
-    set({ socket: socket });
+    set({ socket });
 
     socket.on("getOnlineUsers", (userIds) => {
       set({ onlineUsers: userIds });
     });
   },
   disconnectSocket: () => {
-    if (get().socket?.connected) get().socket.disconnect();
+    const socket = get().socket;
+    if (socket) {
+      socket.removeAllListeners();
+      socket.disconnect();
+    }
+    set({ socket: null, onlineUsers: [] });
+  },
+  clearSession: () => {
+    get().disconnectSocket();
+    set({ authUser: null });
+    window.dispatchEvent(new Event("chat:reset"));
   },
 }));
+
+window.addEventListener("auth:unauthorized", () => useAuthStore.getState().clearSession());

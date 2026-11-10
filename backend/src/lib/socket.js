@@ -1,40 +1,58 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import { parseCookie } from "cookie";
+import { appConfig } from "../config.js";
+import { verifyToken } from "./utils.js";
+import { findPublicUserById } from "../models/user.model.js";
 
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === "production"
-      ? [process.env.FRONTEND_URL || "https://your-app.vercel.app"]
-      : ["http://localhost:5174", "http://localhost:5173"],
+    origin: appConfig.allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
-const users = {};
+const userSockets = new Map();
+
+const emitOnlineUsers = () => {
+  io.emit("getOnlineUsers", [...userSockets.keys()]);
+};
+
+io.use(async (socket, next) => {
+  try {
+    const cookies = parseCookie(socket.handshake.headers.cookie || "");
+    if (!cookies.token) return next(new Error("Authentication required"));
+
+    const decoded = verifyToken(cookies.token);
+    const user = await findPublicUserById(decoded.userId);
+    if (!user) return next(new Error("Authentication required"));
+
+    socket.data.userId = user._id;
+    return next();
+  } catch {
+    return next(new Error("Authentication required"));
+  }
+});
 
 io.on("connection", (socket) => {
-  console.log("A user connected", socket.id);
-
-  const userId = socket.handshake.query.userId;
-  if (userId) users[userId] = socket.id;
-
-  io.emit("getOnlineUsers", Object.keys(users));
+  const userId = socket.data.userId;
+  const sockets = userSockets.get(userId) || new Set();
+  sockets.add(socket.id);
+  userSockets.set(userId, sockets);
+  socket.join(`user:${userId}`);
+  emitOnlineUsers();
 
   socket.on("disconnect", () => {
-    console.log("A user disconnected", socket.id);
-    delete users[userId];
-    io.emit("getOnlineUsers", Object.keys(users));
-  });
-
-  socket.on("getOnlineUsers", () => {
-    io.emit("getOnlineUsers", Object.keys(users));
+    const currentSockets = userSockets.get(userId);
+    currentSockets?.delete(socket.id);
+    if (currentSockets?.size === 0) userSockets.delete(userId);
+    emitOnlineUsers();
   });
 });
 
-export const getReceiverSocketId = (userId) => users[userId];
 export { io, app, server };

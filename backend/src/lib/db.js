@@ -1,10 +1,22 @@
-import mongoose from "mongoose";
+import pg from "pg";
+import { appConfig } from "../config.js";
+
+const { Pool } = pg;
+
+export const pool = new Pool({
+  connectionString: appConfig.databaseUrl,
+  max: 10,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
+});
+
+pool.on("error", (error) => {
+  console.error("Unexpected Postgres pool error:", error.message);
+});
 
 export const connectDb = async () => {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log(`Database connected successfully :${mongoose.connection.host}`);
-    } catch (error) {
-        console.log("MongoDb connection error:", error);
-    }
+  await pool.query("SELECT 1");
+  console.log("Connected to Neon Postgres");
 };
+
+export const closeDb = () => pool.end();

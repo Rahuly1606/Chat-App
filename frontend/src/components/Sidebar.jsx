@@ -9,21 +9,10 @@ const Sidebar = () => {
   const { onlineUsers = [] } = useAuthStore(); // Default to an empty array if undefined
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [showFilterOptions, setShowFilterOptions] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     getUsers();
   }, [getUsers]);
-
-  // Detect mobile screen
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const filteredUsers = showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
@@ -44,6 +33,8 @@ const Sidebar = () => {
           <button
             onClick={() => setShowFilterOptions(!showFilterOptions)}
             className="btn btn-sm btn-circle"
+            aria-label="Toggle user filters"
+            aria-expanded={showFilterOptions}
           >
             <Filter size={18} className={showOnlineOnly ? "text-primary" : ""} />
           </button>
@@ -74,7 +65,7 @@ const Sidebar = () => {
               key={user._id}
               onClick={() => setSelectedUser(user)}
               className={`
-                w-full py-3 px-4 flex items-center gap-3
+                w-[calc(100%_-_1rem)] py-3 px-4 flex items-center gap-3
                 hover:bg-base-300 transition-colors rounded-lg mx-2 my-1
                 ${selectedUser?._id === user._id ? "bg-base-300 ring-1 ring-base-300" : ""}
               `}
@@ -82,13 +73,14 @@ const Sidebar = () => {
               <div className="relative">
                 <img
                   src={user.profilePic || "/avatar.jpg"}
-                  alt={user.name}
+                  alt={user.fullName}
                   className="size-12 object-cover rounded-full"
                 />
                 {onlineUsers.includes(user._id) && (
                   <span
                     className="absolute bottom-0 right-0 size-3 bg-green-500 
                     rounded-full ring-2 ring-base-100"
+                    aria-label="Online"
                   />
                 )}
               </div>

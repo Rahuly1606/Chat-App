@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { Camera, Mail, User } from "lucide-react";
+import toast from "react-hot-toast";
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
@@ -9,6 +10,14 @@ const ProfilePage = () => {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+      toast.error("Please select a JPEG, PNG, WebP, or GIF image");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size cannot exceed 5MB");
+      return;
+    }
 
     const reader = new FileReader();
 
@@ -18,7 +27,9 @@ const ProfilePage = () => {
       const base64Image = reader.result;
       setSelectedImg(base64Image);
       await updateProfile({ profilePic: base64Image });
+      setSelectedImg(null);
     };
+    reader.onerror = () => toast.error("Could not read the selected image");
   };
 
   return (
@@ -48,6 +59,7 @@ const ProfilePage = () => {
                   transition-all duration-200
                   ${isUpdatingProfile ? "animate-pulse pointer-events-none" : ""}
                 `}
+                aria-label="Update profile picture"
               >
                 <Camera className="w-5 h-5 text-base-200" />
                 <input
