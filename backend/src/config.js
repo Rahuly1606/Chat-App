@@ -15,6 +15,7 @@ loadEnv({
 });
 
 const localOrigins = ["http://localhost:5173", "http://localhost:5174"];
+const deploymentOrigins = ["https://chat-app-rho-vert-i30k6wcp7s.vercel.app"];
 const configuredOrigins = (process.env.FRONTEND_URL || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -23,7 +24,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const developmentJwtSecret = randomBytes(32).toString("hex");
 
 export const appConfig = {
-  allowedOrigins: [...new Set([...localOrigins, ...configuredOrigins])],
+  allowedOrigins: [...new Set([...localOrigins, ...deploymentOrigins, ...configuredOrigins])],
   cloudinary: {
     apiKey: process.env.CLOUDINARY_API_KEY,
     apiSecret: process.env.CLOUDINARY_API_SECRET,
