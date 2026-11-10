@@ -8,7 +8,6 @@ const rootDirectory = path.resolve(currentDirectory, "../..");
 
 loadEnv({
   path: [
-    path.join(rootDirectory, "backend/.env.local"),
     path.join(rootDirectory, ".env.local"),
     path.join(rootDirectory, ".env"),
     path.join(rootDirectory, "backend/.env"),

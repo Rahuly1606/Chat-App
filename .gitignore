@@ -1,0 +1,35 @@
+# Dependencies and build output
+node_modules/
+dist/
+*.log
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Local tooling
+.neon
+.kilo/
+.vscode/
+.idea/
+.DS_Store
+*** Add File: .env
+# Shared deployment configuration. Keep this file local and import the
+# backend variables into Render and the VITE_* variables into Vercel.
+
+# Backend: Render
+NODE_ENV=production
+DATABASE_URL=postgresql://neondb_owner:npg_orHPzkg2KOC0@ep-dark-paper-bdbes9tq-pooler.c-8.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+DATABASE_URL_UNPOOLED=postgresql://neondb_owner:npg_orHPzkg2KOC0@ep-dark-paper-bdbes9tq.c-8.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+JWT_SECRET=6ba8e59bc95293bbc094a1a672402259cf2b0aee6b6558c72d5e9651a6ebbac9bb6b4a65dd52c6e97943b0eac7289526ef5ff666e746cba7c5e99938d76a76c4
+FRONTEND_URL=https://your-chat-app.vercel.app
+
+# Cloudinary: Render only
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+
+# Frontend: Vercel (these values are public in the browser bundle)
+VITE_API_URL=https://your-chat-backend.onrender.com
+VITE_SOCKET_URL=https://your-chat-backend.onrender.com
